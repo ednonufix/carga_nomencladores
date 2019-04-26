@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ /*
+  ~  * Copyright (C) 2018 Eduardo Noel <enoel.corebsd@nauta.cu>
+  ~  *
+  ~  * This program is free software: you can redistribute it and/or modify
+  ~  * it under the terms of the GNU General Public License as published by
+  ~  * the Free Software Foundation, either version 3 of the License, or
+  ~  * (at your option) any later version.
+  ~  *
+  ~  * This program is distributed in the hope that it will be useful,
+  ~  * but WITHOUT ANY WARRANTY; without even the implied warranty of
+  ~  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  ~  * GNU General Public License for more details.
+  ~  *
+  ~  * You should have received a copy of the GNU General Public License
+  ~  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+  ~  */
+  -->
+
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:mvc="http://www.springframework.org/schema/mvc"
+       xmlns:p="http://www.springframework.org/schema/p"
+
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-4.3.xsd
+          http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-4.3.xsd
+          http://www.springframework.org/schema/mvc http://www.springframework.org/schema/mvc/spring-mvc.xsd
+">
+
+    <context:annotation-config/>
+    <context:component-scan base-package="cu.com.cimex"/>
+
+    <!-- CONEXION  BD
+    BD con nombre nomencladores.mv.db-->
+
+    <bean id="dataSource" class="com.zaxxer.hikari.HikariDataSource" destroy-method="close">
+        <property name="driverClassName" value="org.h2.Driver"/>
+        <property name="jdbcUrl" value="jdbc:h2:~/nomencladores;MVCC=TRUE;DB_CLOSE_ON_EXIT=TRUE;CIPHER=AES"/>
+        <property name="username" value="root"/>
+        <property name="password" value="filepwd Adm1n123"/>
+    </bean>
+
+    <bean id="sessionFactory" class="org.springframework.orm.hibernate5.LocalSessionFactoryBean">
+
+        <property name="dataSource" ref="dataSource"/>
+
+        <property name="mappingResources">
+
+            <list>
+                <value>Job.hbm.xml</value>
+            </list>
+
+        </property>
+
+        <property name="hibernateProperties">
+
+            <value>
+                hibernate.hbm2ddl.auto=create-drop
+                hibernate.connection.autocommit=false
+                hibernate.dialect=org.hibernate.dialect.H2Dialect
+            </value>
+
+        </property>
+
+    </bean>
+
+    <bean id="transactionManager" class="org.springframework.orm.hibernate5.HibernateTransactionManager">
+        <property name="sessionFactory" ref="sessionFactory"/>
+    </bean>
+
+    <!-- BEANS -->
+
+    <bean id="loadProperties" class="cu.com.cimex.impl.bo.TLoadProperties"/>
+    <bean id="ejecutaBO" class="cu.com.cimex.impl.bo.TEjecuta"/>
+
+    <bean id="cronBO" class="cu.com.cimex.impl.bo.TCronBOImpl"/>
+
+    <bean id="cronDAO" class="cu.com.cimex.impl.dao.TCronDAOImpl">
+        <property name="sessionFactory" ref="sessionFactory"/>
+    </bean>
+
+    <!-- job scheduler -->
+
+    <bean id="comprueba" class="org.springframework.scheduling.quartz.JobDetailFactoryBean" parent="loadProperties">
+        <property name="jobClass" value="cu.com.cimex.utiles.CompruebaCrones"/>
+        <property name="jobDataAsMap">
+            <map>
+                <entry key="timeout" value="5"/>
+            </map>
+        </property>
+    </bean>
+
+    <bean id="procesaftp" class="org.springframework.scheduling.quartz.JobDetailFactoryBean" parent="loadProperties">
+        <property name="jobClass" value="cu.com.cimex.utiles.ProcesaFTP"/>
+        <property name="jobDataAsMap">
+            <map>
+                <entry key="timeout" value="5"/>
+            </map>
+        </property>
+    </bean>
+
+    <bean id="croncomprueba" class="org.springframework.scheduling.quartz.CronTriggerFactoryBean">
+        <property name="jobDetail" ref="comprueba"/>
+
+        <!-- ejecuta cada 3 minutos, por ejemplo */15 -->
+        <property name="cronExpression" value="0 */3 * * * ?"/>
+
+    </bean>
+
+    <bean id="cronftp" class="org.springframework.scheduling.quartz.CronTriggerFactoryBean">
+        <property name="jobDetail" ref="procesaftp"/>
+
+        <!-- ejecuta cada 2 minutos, por ejemplo */15 -->
+        <property name="cronExpression" value="0 */2 * * * ?"/>
+
+    </bean>
+
+    <bean class="org.springframework.scheduling.quartz.SchedulerFactoryBean">
+        <property name="triggers">
+            <list>
+                <ref bean="croncomprueba"/>
+                <ref bean="cronftp"/>
+            </list>
+        </property>
+    </bean>
+
+    <!-- Otros -->
+    <mvc:annotation-driven>
+        <mvc:message-converters>
+            <bean class="org.springframework.http.converter.json.MappingJackson2HttpMessageConverter">
+                <property name="objectMapper" ref="objectMapper"/>
+            </bean>
+        </mvc:message-converters>
+    </mvc:annotation-driven>
+
+    <bean id="objectMapper" class="org.springframework.http.converter.json.Jackson2ObjectMapperFactoryBean"
+          p:indentOutput="true"
+          p:simpleDateFormat="yyyy-MM-dd"/>
+
+    <mvc:default-servlet-handler/>
+
+    <bean id="multipartResolver" class="org.springframework.web.multipart.support.StandardServletMultipartResolver"/>
+
+</beans>
